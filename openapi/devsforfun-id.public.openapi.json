@@ -1,0 +1,2312 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "devsforfun ID API",
+    "version": "1.0.0",
+    "description": "\"Sign in with devsforfun ID\" — the public integration API for satellite apps.\n\nAuthentication schemes (see securitySchemes):\n- **projectHmac** — server-to-server endpoints for your registered project.\n- **bearerSession** — user-session endpoints (the signed-in user acting on their own account).\n\nThe typed Node client for everything here is `@devsforfun/id-sdk` (public npm).",
+    "contact": {
+      "name": "devsforfun",
+      "url": "https://devsforfun.app",
+      "email": "developers@devsforfun.app"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://devsforfun.app",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3001",
+      "description": "Local development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "projectHmac": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-DFF-Signature",
+        "description": "Project-HMAC authentication for satellite servers. Two headers on every request:\n\n    X-DFF-Project:   <projects.id (uuid)>\n    X-DFF-Signature: sha256=<hex HMAC-SHA256(payload, signing_secret)>\n\nThe signing secret is issued once at project creation/rotation (Developer console → project credentials).\nThe signed payload depends on the route:\n- POST routes: the EXACT raw request body bytes (sign before serializing anything else; never re-stringify).\n- GET /api/profile/{userId}: the literal userId.\n- GET /api/entitlements/{userId}/{appId}: the literal string `userId:appId`.\n- GET /api/sessions?user_id=…: the literal user_id.\n- DELETE /api/sessions/{id}: the literal session id.\n\nComparison is timing-safe; failures return a deliberately coarse 403 (unknown project, bad signature,\nsuspended app, and not-first-party are indistinguishable). The `@devsforfun/id-sdk` signs automatically."
+      },
+      "bearerSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "User-session authentication: a devsforfun ID access token (hub-issued JWT) as a Bearer token. Browser calls may instead carry the session cookie set by the hub."
+      }
+    },
+    "schemas": {
+      "MyProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User id (auth.users.id)."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Account email."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name."
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Unique handle; null until chosen."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Account creation timestamp (ISO 8601)."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Last profile update timestamp (ISO 8601)."
+          },
+          "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Resolved avatar URL."
+          },
+          "linked_providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Upstream identity providers linked to the account (e.g. google)."
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "username",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Stable machine-readable error code."
+          },
+          "error_description": {
+            "type": "string",
+            "description": "Human-readable detail (OAuth endpoints, RFC 6749 shape)."
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "ProfilePatch": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "New display name."
+          },
+          "username": {
+            "type": "string",
+            "description": "New unique handle."
+          }
+        }
+      },
+      "AvatarUploadResponse": {
+        "type": "object",
+        "properties": {
+          "avatar_url": {
+            "type": "string",
+            "description": "Public URL of the new avatar."
+          }
+        },
+        "required": [
+          "avatar_url"
+        ]
+      },
+      "AvatarUpload": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "Image file (image/jpeg, image/png, image/webp)."
+          }
+        },
+        "required": [
+          "file"
+        ]
+      },
+      "SatelliteProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User id."
+          },
+          "sub": {
+            "type": "string",
+            "format": "uuid",
+            "description": "OIDC subject — always present."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only with the `email` scope AND the email data class enabled."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only with the `profile` scope AND the profile_basic data class enabled."
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Gated like display_name."
+          },
+          "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Gated like display_name."
+          },
+          "linked_providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Gated like display_name."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Gated like display_name."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Gated like display_name."
+          }
+        },
+        "required": [
+          "id",
+          "sub"
+        ]
+      },
+      "PublicProfile": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The requested handle."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when public."
+          },
+          "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when public."
+          },
+          "bio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when the user made it public."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Present when the user made them public."
+          }
+        },
+        "required": [
+          "username"
+        ]
+      },
+      "TokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Hub-issued JWT (verify against the hub JWKS)."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Rotating refresh token."
+          },
+          "id_token": {
+            "type": "string",
+            "description": "OIDC ID token when the openid scope was granted."
+          },
+          "token_type": {
+            "type": "string",
+            "enum": [
+              "Bearer"
+            ],
+            "description": "Always Bearer."
+          },
+          "expires_in": {
+            "type": "number",
+            "description": "Access-token lifetime in seconds."
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_in"
+        ]
+      },
+      "AuthorizationCodeGrant": {
+        "type": "object",
+        "properties": {
+          "grant_type": {
+            "type": "string",
+            "enum": [
+              "authorization_code"
+            ],
+            "description": "PKCE code exchange."
+          },
+          "code": {
+            "type": "string",
+            "description": "Authorization code from the consent redirect."
+          },
+          "code_verifier": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 128,
+            "description": "PKCE verifier matching the code_challenge sent at /oauth/authorize."
+          },
+          "redirect_uri": {
+            "type": "string",
+            "format": "uri",
+            "description": "Must equal the registered redirect URI."
+          },
+          "client_id": {
+            "type": "string",
+            "description": "OAuth client id — the gotrue uuid (what the SDK stores) or the dff_… label."
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "Confidential clients only; public (PKCE) clients omit it."
+          }
+        },
+        "required": [
+          "grant_type",
+          "code",
+          "code_verifier",
+          "redirect_uri",
+          "client_id"
+        ]
+      },
+      "RefreshTokenGrant": {
+        "type": "object",
+        "properties": {
+          "grant_type": {
+            "type": "string",
+            "enum": [
+              "refresh_token"
+            ],
+            "description": "Refresh-token grant."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "The refresh token from the previous response."
+          },
+          "client_id": {
+            "type": "string",
+            "description": "Same client identifier as the original grant."
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "Confidential clients only."
+          }
+        },
+        "required": [
+          "grant_type",
+          "refresh_token",
+          "client_id"
+        ]
+      },
+      "TokenRequest": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AuthorizationCodeGrant"
+          },
+          {
+            "$ref": "#/components/schemas/RefreshTokenGrant"
+          }
+        ]
+      },
+      "Userinfo": {
+        "type": "object",
+        "properties": {
+          "sub": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Subject — always present."
+          },
+          "email": {
+            "type": "string",
+            "description": "With the email scope."
+          },
+          "email_verified": {
+            "type": "boolean",
+            "description": "With the email scope."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With the profile scope."
+          },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With the profile scope."
+          }
+        },
+        "required": [
+          "sub"
+        ]
+      },
+      "WebhookSubscribeResponse": {
+        "type": "object",
+        "properties": {
+          "subscription_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Subscription id."
+          },
+          "signing_secret": {
+            "type": "string",
+            "description": "Delivery-signature secret — shown only once."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation timestamp."
+          }
+        },
+        "required": [
+          "subscription_id",
+          "signing_secret",
+          "created_at"
+        ]
+      },
+      "WebhookSubscribeRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The user the events concern."
+          },
+          "resource": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Event resource to subscribe to (e.g. user.erasure_requested, or another app’s published <app-slug>.* events you are granted)."
+          },
+          "endpoint_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "HTTPS endpoint to deliver events to (SSRF-guarded)."
+          }
+        },
+        "required": [
+          "user_id",
+          "resource",
+          "endpoint_url"
+        ]
+      },
+      "WebhookSubscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Subscription id."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Subscribed user."
+          },
+          "resource": {
+            "type": "string",
+            "description": "Subscribed resource."
+          },
+          "endpoint_url": {
+            "type": "string",
+            "description": "Delivery endpoint."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation timestamp."
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Always null in this listing."
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "resource",
+          "endpoint_url",
+          "created_at",
+          "revoked_at"
+        ]
+      },
+      "WebhookSubscriptionList": {
+        "type": "object",
+        "properties": {
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookSubscription"
+            }
+          }
+        },
+        "required": [
+          "subscriptions"
+        ]
+      },
+      "WebhookUnsubscribeResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "EventPublishResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "delivered_to": {
+            "type": "number",
+            "description": "Matched subscriptions enqueued."
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "EventPublishRequest": {
+        "type": "object",
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Namespaced event type (<app-slug>.<noun>.<verb>)."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The user the event concerns."
+          },
+          "data": {
+            "description": "Event payload, delivered verbatim."
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Idempotency id; generated when omitted."
+          }
+        },
+        "required": [
+          "event_type",
+          "user_id"
+        ]
+      },
+      "SessionDevice": {
+        "type": "object",
+        "properties": {
+          "browser": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Parsed browser label, e.g. \"Chrome 126\"."
+          },
+          "os": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Parsed OS label, e.g. \"macOS 10.15\"."
+          },
+          "device_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "desktop",
+              "mobile",
+              "tablet",
+              "bot",
+              "server"
+            ],
+            "description": "Coarse device class; \"server\" = non-browser API client."
+          }
+        },
+        "required": [
+          "browser",
+          "os",
+          "device_type"
+        ]
+      },
+      "SessionLocation": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 3166-1 alpha-2 country code."
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Region code within the country."
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "City name."
+          }
+        },
+        "required": [
+          "country",
+          "region",
+          "city"
+        ],
+        "description": "Approximate location captured at sign-in from request geo headers; all-null renders as \"Unknown\"."
+      },
+      "AppSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session id (auth.sessions.id)."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The user the session belongs to."
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Session creation timestamp (ISO 8601)."
+          },
+          "last_active_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last refresh/activity timestamp (ISO 8601)."
+          },
+          "not_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hard expiry, when set; null = no fixed expiry."
+          },
+          "device": {
+            "$ref": "#/components/schemas/SessionDevice"
+          },
+          "location": {
+            "$ref": "#/components/schemas/SessionLocation"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "created_at",
+          "last_active_at",
+          "not_after",
+          "device",
+          "location"
+        ]
+      },
+      "AppAuthEvent": {
+        "type": "object",
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "description": "Event type, e.g. app_signin_success. IPs are never included."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Event timestamp (ISO 8601)."
+          },
+          "device": {
+            "$ref": "#/components/schemas/SessionDevice"
+          },
+          "location": {
+            "$ref": "#/components/schemas/SessionLocation"
+          }
+        },
+        "required": [
+          "event_type",
+          "created_at",
+          "device",
+          "location"
+        ]
+      },
+      "SessionsListResponse": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppSession"
+            }
+          },
+          "recent_events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppAuthEvent"
+            }
+          }
+        },
+        "required": [
+          "sessions",
+          "recent_events"
+        ]
+      },
+      "SessionRevokeResponse": {
+        "type": "object",
+        "properties": {
+          "revoked": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "revoked",
+          "session_id"
+        ]
+      },
+      "Entitlement": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "feature_code": {
+            "type": "string",
+            "description": "Entitled feature (default: \"default\")."
+          },
+          "granted_at": {
+            "type": "string",
+            "description": "Grant timestamp."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Expiry; null = open-ended."
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Always null on active entitlements."
+          }
+        },
+        "required": [
+          "feature_code",
+          "granted_at",
+          "expires_at",
+          "revoked_at"
+        ],
+        "description": "The active entitlement, or null."
+      },
+      "EntitlementPullResponse": {
+        "type": "object",
+        "properties": {
+          "entitled": {
+            "type": "boolean",
+            "description": "Whether an active entitlement exists."
+          },
+          "entitlement": {
+            "$ref": "#/components/schemas/Entitlement"
+          }
+        },
+        "required": [
+          "entitled",
+          "entitlement"
+        ]
+      },
+      "EntitlementReportResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "EntitlementReportRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The entitled user."
+          },
+          "app_listing_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The calling app’s listing."
+          },
+          "feature_code": {
+            "type": "string",
+            "description": "Feature granted; defaults to \"default\"."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "description": "Grant or revoke."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Expiry for time-boxed grants."
+          },
+          "external_reference": {
+            "type": "string",
+            "description": "Satellite-side reference (order id etc.)."
+          }
+        },
+        "required": [
+          "user_id",
+          "app_listing_id",
+          "status"
+        ]
+      },
+      "DataShareTokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Opaque access token (1h TTL, stored hashed)."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Rotating refresh token — each refresh INVALIDATES the previous one; reuse revokes the grant."
+          },
+          "expires_in": {
+            "type": "number",
+            "description": "Access-token lifetime in seconds (3600)."
+          },
+          "token_type": {
+            "type": "string",
+            "enum": [
+              "Bearer"
+            ]
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token",
+          "expires_in",
+          "token_type"
+        ]
+      },
+      "DataShareTokenRequest": {
+        "type": "object",
+        "properties": {
+          "grant_type": {
+            "type": "string",
+            "enum": [
+              "authorization_code",
+              "refresh_token"
+            ],
+            "description": "Exchange type."
+          },
+          "code": {
+            "type": "string",
+            "description": "One-time code (authorization_code grant)."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Current refresh token (refresh_token grant)."
+          },
+          "target_client_id": {
+            "type": "string",
+            "description": "The consuming app’s client identifier."
+          }
+        },
+        "required": [
+          "grant_type",
+          "target_client_id"
+        ]
+      },
+      "DataShareIntrospectResponse": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "False on ANY failure (soft-fail)."
+          },
+          "sub": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The consenting user."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Space-separated granted scopes."
+          },
+          "source_project_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Data-providing project."
+          },
+          "target_project_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Data-consuming project (the caller)."
+          },
+          "exp": {
+            "type": "number",
+            "description": "Expiry (epoch seconds)."
+          }
+        },
+        "required": [
+          "active"
+        ]
+      },
+      "DataShareIntrospectRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The opaque access token to validate."
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "ErasureAckResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "matched": {
+            "type": "boolean",
+            "description": "Whether a pending ack row was updated."
+          }
+        },
+        "required": [
+          "ok",
+          "matched"
+        ]
+      },
+      "ErasureAckRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The erased user."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "acked",
+              "failed"
+            ],
+            "description": "Whether the satellite-side erasure succeeded."
+          },
+          "error": {
+            "type": "string",
+            "description": "Failure detail when status=failed."
+          }
+        },
+        "required": [
+          "user_id",
+          "status"
+        ]
+      },
+      "ActivityReportResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "ActivityReportRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The active user."
+          },
+          "last_active_at": {
+            "type": "string",
+            "description": "Activity timestamp; defaults to now."
+          },
+          "activity_score": {
+            "type": "number",
+            "description": "Optional engagement weight."
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/profile/me": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Get the signed-in user’s profile",
+        "security": [
+          {
+            "bearerSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller’s own profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (120/min per user).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiProfileMe"
+      },
+      "patch": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Update display name and/or username",
+        "description": "Both fields optional; at least one change required (400 no_changes otherwise). Usernames are globally unique — collisions return 409 username_taken.",
+        "security": [
+          {
+            "bearerSession": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_json / invalid_body / no_changes / validation detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "username_taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (20/min per user).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiProfileMe"
+      }
+    },
+    "/api/profile/me/avatar": {
+      "post": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Upload a custom avatar",
+        "description": "multipart/form-data with a single `file` field. JPEG/PNG/WEBP only, size-capped; sets profiles.avatar_url and avatar_source=custom.",
+        "security": [
+          {
+            "bearerSession": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AvatarUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded; returns the resolved avatar URL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvatarUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_multipart / file_field_required / unsupported_mime / empty_file / file too large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (10/min per user).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProfileMeAvatar"
+      }
+    },
+    "/api/profile/{userId}": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Satellite profile lookup (consent- and sharing-gated)",
+        "description": "Returns the user’s profile to a satellite that holds a live OAuth grant from that user. Field release composes the grant’s OIDC scopes with the per-app data-sharing catalog: `email` needs the email scope AND the email data class enabled; profile fields need the profile scope AND profile_basic enabled; `id`/`sub` always flow. Revoking the app cuts this off entirely (403 no_consent). Signed payload: the literal userId.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The user to look up."
+            },
+            "required": true,
+            "description": "The user to look up.",
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scope- and sharing-gated profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SatelliteProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "profile_not_found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiProfileByUserId"
+      }
+    },
+    "/api/profile/public/{username}": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Public profile card by username",
+        "description": "Unauthenticated. Returns only the fields the user made public via per-field profile visibility (display_name/username/avatar_url default public; everything else default private). 404 when the username doesn’t resolve OR nothing is public — indistinguishable on purpose.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "The public handle to look up."
+            },
+            "required": true,
+            "description": "The public handle to look up.",
+            "name": "username",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The public fields only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown username or fully-private profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiProfilePublicByUsername"
+      }
+    },
+    "/api/oauth/token": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "OAuth 2.1 token endpoint (authorization_code + refresh_token)",
+        "description": "RFC 6749 token endpoint, fronting Supabase GoTrue. Authenticated by the OAuth parameters themselves (client_id + PKCE verifier; client_secret for confidential clients) — no separate scheme. Accepts application/x-www-form-urlencoded or JSON. Errors use the RFC 6749 envelope {error, error_description}. Rate limit: 60/min per client_id.",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AuthorizationCodeGrant"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RefreshTokenGrant"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens issued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_request / invalid_client / invalid_grant / unsupported_grant_type (RFC 6749).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiOauthToken"
+      }
+    },
+    "/api/oauth/userinfo": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "OIDC userinfo",
+        "description": "Returns claims filtered by the access token’s scope claim (openid → sub; email → email + email_verified; profile → name + picture). Rate limit: 120/min per user.",
+        "security": [
+          {
+            "bearerSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scope-filtered claims.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Userinfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiOauthUserinfo"
+      }
+    },
+    "/api/webhooks/subscriptions": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Create a webhook subscription",
+        "description": "Subscribes the calling project to a resource for one user. The returned signing_secret is shown ONCE — store it; deliveries are signed with it (X-Webhook-Signature: sha256=hmac(`${ts}.${body}`)). Signed payload: the raw request body.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookSubscribeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Subscription created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSubscribeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiWebhooksSubscriptions"
+      },
+      "get": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "List the calling project’s active subscriptions",
+        "description": "Active (non-revoked) subscriptions owned by the calling project. Signed payload: the literal project id (GET has no body). Rate limit: 60/min per project.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active subscriptions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSubscriptionList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiWebhooksSubscriptions"
+      }
+    },
+    "/api/webhooks/subscriptions/{id}": {
+      "delete": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Revoke a webhook subscription",
+        "description": "Stops deliveries for the subscription. Only the owning project may revoke it. Signed payload: the literal subscription id.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Subscription id to revoke."
+            },
+            "required": true,
+            "description": "Subscription id to revoke.",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookUnsubscribeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "update_failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "deleteApiWebhooksSubscriptionsById"
+      }
+    },
+    "/api/webhooks/events/publish": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Publish a custom event to subscribers",
+        "description": "Fans a custom event out to every subscription matching the resource. The event_type MUST be namespaced under the publishing app’s slug (`<app-slug>.<noun>.<verb>`) — publishing under another app’s namespace is rejected. Signed payload: the raw request body.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventPublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted for delivery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPublishResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiWebhooksEventsPublish"
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List sessions of a user in the calling app",
+        "description": "Returns ONLY the sessions and recent auth events attributable to the calling project (cross-app isolation is structural). Requires the user to still have the app connected — revoking from the connected-apps panel cuts this off (403 no_consent), as does opting out of the optional `sessions` data class (403 sharing_disabled). Signed payload: the literal `user_id` value.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The user whose sessions to list."
+            },
+            "required": true,
+            "description": "The user whose sessions to list.",
+            "name": "user_id",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sessions + recent auth events for this user in this app.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionsListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiSessions"
+      }
+    },
+    "/api/sessions/{id}": {
+      "delete": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Revoke one of the calling app’s sessions",
+        "description": "Deletes the session, signing the user out of the satellite on next token refresh. The session must belong to the calling app — foreign sessions return 404 without leaking whether they exist. Signed payload: the literal session id.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Session id to revoke."
+            },
+            "required": true,
+            "description": "Session id to revoke.",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRevokeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown session, or a session that belongs to another app (indistinguishable on purpose).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "deleteApiSessionsById"
+      }
+    },
+    "/api/entitlements/{userId}/{appId}": {
+      "get": {
+        "tags": [
+          "Entitlements"
+        ],
+        "summary": "Pull a user’s entitlement for the calling app",
+        "description": "The satellite-facing entitlement lookup (the SDK caches it for 60s). Gates: the listing must belong to the calling project (403 not_your_listing); the user must still have the app connected (403 no_consent — revoking from connected-apps cuts this off); the entitlements data class must not be opted out (403 sharing_disabled). Signed payload: the literal string `userId:appId`. Rate limit: 120/min per project.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The user to check."
+            },
+            "required": true,
+            "description": "The user to check.",
+            "name": "userId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The calling app’s app_listing id."
+            },
+            "required": true,
+            "description": "The calling app’s app_listing id.",
+            "name": "appId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Entitlement state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementPullResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiEntitlementsByUserIdByAppId"
+      }
+    },
+    "/api/entitlements/report": {
+      "post": {
+        "tags": [
+          "Entitlements"
+        ],
+        "summary": "Report a self-managed entitlement change",
+        "description": "For satellites that sell access through their own flows: upserts an entitlement the hub then treats as authoritative. Object-level auth: the app_listing must belong to the calling project. Signed payload: the raw request body. Rate limit: 120/min per project.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntitlementReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementReportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiEntitlementsReport"
+      }
+    },
+    "/api/oauth/data-share/token": {
+      "post": {
+        "tags": [
+          "Data Sharing"
+        ],
+        "summary": "Exchange a data-share code or refresh token",
+        "description": "Token endpoint for the cross-app data-share flow. grant_type=authorization_code exchanges the ONE-TIME code minted at user consent; grant_type=refresh_token rotates the pair (the old refresh token is invalidated — replaying it is treated as theft and revokes the whole grant). Authenticated by the code/refresh-token + target client identity, RFC 6749-style. Rate limit: 60/min per client.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataShareTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token pair issued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataShareTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "missing_client / invalid_code / invalid_refresh / unsupported_grant_type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "app_suspended.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiOauthDataShareToken"
+      }
+    },
+    "/api/oauth/data-share/introspect": {
+      "post": {
+        "tags": [
+          "Data Sharing"
+        ],
+        "summary": "Introspect a data-share token (RFC 7662)",
+        "description": "Called by the TARGET project to validate a presented data-share access token. Any failure returns {active:false} without detail. Signed payload: the raw request body. Rate limit: 600/min per project.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataShareIntrospectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Introspection result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataShareIntrospectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiOauthDataShareIntrospect"
+      }
+    },
+    "/api/oauth/data-share/erasure-ack": {
+      "post": {
+        "tags": [
+          "Data Sharing"
+        ],
+        "summary": "Acknowledge a user.erasure_requested event",
+        "description": "After the hub fans out user.erasure_requested (account deletion), each satellite wipes its copy of the user’s data and confirms here. A caller can only ack its OWN (user, project) row — the project comes from the HMAC identity, never the body. Signed payload: the raw request body.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasureAckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded. matched=false means no pending ack row existed for this (user, project).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureAckResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ack_failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiOauthDataShareErasureAck"
+      }
+    },
+    "/api/activity/report": {
+      "post": {
+        "tags": [
+          "Activity"
+        ],
+        "summary": "Report user activity in the calling app",
+        "description": "Upserts the user’s activity row for the calling app (unlocks verified-user reviews, feeds analytics). Signed payload: the raw request body. Rate limit: 600/min per project.",
+        "security": [
+          {
+            "projectHmac": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivityReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityReportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing credentials or malformed request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or authorization failed (coarse on purpose: unknown_project / bad_signature / app_suspended / no_consent are not distinguished beyond the error code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Retry-After header carries the wait in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiActivityReport"
+      }
+    }
+  },
+  "webhooks": {}
+}
