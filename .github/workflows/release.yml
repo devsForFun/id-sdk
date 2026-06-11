@@ -1,0 +1,25 @@
+name: Release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC provenance)
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm install -g npm@latest # trusted publishing needs npm >= 11.5
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm publish --provenance --access public
+        env:
+          # Ignored when npm trusted publishing is configured; fallback otherwise.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
