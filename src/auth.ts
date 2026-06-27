@@ -153,6 +153,39 @@ async function postTokenEndpoint(
     }
 }
 
+// ── OAuth state round-trip ──────────────────────────────────────────────────
+// Satellites embed a CSRF nonce + post-auth return path into the opaque
+// `state` param that travels to the hub and back unchanged. These helpers
+// standardise the encoding so every satellite uses the same wire format.
+//
+// Shape on the wire: base64url(JSON({ s: csrf, r: returnTo }))
+// btoa/atob are standard globals in Node ≥18 and all modern browsers.
+
+interface StatePayload { s: string; r: string }
+
+function encodeStatePayload(payload: StatePayload): string {
+    const base64 = btoa(JSON.stringify(payload));
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function decodeStatePayload(state: string): StatePayload | null {
+    try {
+        const base64 = state.replace(/-/g, '+').replace(/_/g, '/');
+        const parsed: unknown = JSON.parse(atob(base64));
+        if (
+            parsed !== null &&
+            typeof parsed === 'object' &&
+            typeof (parsed as Record<string, unknown>).s === 'string' &&
+            typeof (parsed as Record<string, unknown>).r === 'string'
+        ) {
+            return parsed as StatePayload;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 export function createAuth(config: DfidClientConfig) {
     // Single-flight refresh dedupe, keyed by refresh token. Concurrent
     // refreshSession calls with the same token (parallel middleware
@@ -194,6 +227,42 @@ export function createAuth(config: DfidClientConfig) {
             const url = new URL('/logout', config.url);
             if (opts.redirectUri) url.searchParams.set('next', opts.redirectUri);
             return url.toString();
+        },
+
+        /**
+         * Encode a CSRF nonce and an optional post-auth return path into the
+         * `state` parameter for `auth.signIn()`.
+         *
+         * The nonce (`csrf`) must be a random value you generate and store in
+         * a short-lived httpOnly cookie so you can verify it in the callback.
+         * `returnTo` defaults to `'/'` when omitted.
+         *
+         * ```ts
+         * const state = dfid.auth.buildState({ csrf: nonce, returnTo: '/dashboard' });
+         * const url = dfid.auth.signIn({ redirectUri, state, codeChallenge });
+         * ```
+         */
+        buildState(opts: { csrf: string; returnTo?: string }): string {
+            return encodeStatePayload({ s: opts.csrf, r: opts.returnTo ?? '/' });
+        },
+
+        /**
+         * Decode the `state` parameter received in the OAuth callback.
+         *
+         * Returns `null` when the string is malformed or tampered. After
+         * decoding, compare `csrf` against the cookie value to reject CSRF
+         * attacks — only redirect to `returnTo` after the check passes.
+         *
+         * ```ts
+         * const state = dfid.auth.parseState(searchParams.get('state') ?? '');
+         * if (!state || state.csrf !== cookieNonce) return error('state mismatch');
+         * redirect(state.returnTo);
+         * ```
+         */
+        parseState(state: string): { csrf: string; returnTo: string } | null {
+            const payload = decodeStatePayload(state);
+            if (!payload) return null;
+            return { csrf: payload.s, returnTo: payload.r };
         },
 
         // Exchange the OAuth code for tokens (server-side; needs PKCE verifier).
