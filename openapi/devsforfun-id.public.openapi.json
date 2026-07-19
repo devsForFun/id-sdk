@@ -1050,6 +1050,7 @@
           "Profile"
         ],
         "summary": "Get the signed-in user’s profile",
+        "description": "Returns the caller’s own profile fields, including any not exposed on the public profile.",
         "security": [
           {
             "bearerSession": []

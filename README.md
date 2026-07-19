@@ -181,6 +181,17 @@ Strict semver. Breaking changes bump the major. Pre-1.0 (v0.x), minor bumps may 
 
 ## Changelog
 
+- **0.11.1** — **Docs sync, no code change.** Regenerated
+  `src/generated/openapi-types.ts` from the hub's current public OpenAPI
+  spec — `GET /api/profile/me` was missing its `description` (added on the
+  hub side without a matching refresh here). No behavioral change.
+- **0.11.0** — **Additive (OAuth state helpers).**
+  - `auth.buildState({ csrf, returnTo? })` — encodes a CSRF nonce + optional
+    post-auth return path into the base64url-JSON `state` param `auth.signIn`
+    expects, so satellites don't hand-roll the encoding.
+  - `auth.parseState(state)` — decodes it back to `{ csrf, returnTo }`, or
+    `null` if malformed/tampered; compare `csrf` against your stored nonce
+    before honoring `returnTo`.
 - **0.10.0** — **Additive (token refresh).**
   - `auth.refreshSession({ refreshToken, signal?, timeoutMs?, retries?, dedupe? })`
     — exchanges a refresh token at `POST /api/oauth/token`
