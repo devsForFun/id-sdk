@@ -1,0 +1,35 @@
+name: Auto Release
+# Turns a version bump merged to main into a GitHub Release automatically —
+# that Release publish event is what triggers release.yml (npm publish). So
+# the whole flow is: bump package.json + add a README changelog entry, PR,
+# merge — nothing further to do by hand.
+on:
+  push:
+    branches: [main]
+    paths: ['package.json']
+permissions:
+  contents: write
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: check
+        run: |
+          if git rev-parse "v${{ steps.pkg.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create release v${{ steps.pkg.outputs.version }}
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.pkg.outputs.version }}" \
+            --title "v${{ steps.pkg.outputs.version }}" \
+            --notes "See the Changelog section in README.md for details." \
+            --generate-notes

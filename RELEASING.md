@@ -3,8 +3,15 @@
 1. Bump `version` in `package.json` (strict semver; pre-1.0 minors may break).
 2. Add a changelog entry under `## Changelog` in `README.md`.
 3. PR → merge to `main` (CI must be green).
-4. Create a GitHub Release with tag `v<version>` — the `release.yml` workflow
-   builds, tests, and publishes to npm with `--provenance`.
+
+That's it — merging a `package.json` version bump to `main` is the entire
+release trigger now. `auto-release.yml` notices the new version, creates the
+GitHub Release (tag `v<version>`), which fires `release.yml` (build, test,
+`npm publish --provenance`). No manual `gh release create` step anymore.
+
+Only fall back to creating the Release by hand (`gh release create
+v<version>`) if `auto-release.yml` itself is broken — check the Actions tab
+on `main` first.
 
 ## npm auth for the workflow
 

@@ -12,10 +12,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24 # npm@11 (below) requires Node ^22.22.2 || ^24.15.0 || >=26 — keep these two in lockstep
           cache: npm
           registry-url: 'https://registry.npmjs.org'
-      - run: npm install -g npm@latest # trusted publishing needs npm >= 11.5
+      - run: npm install -g npm@11 # trusted publishing needs npm >= 11.5; major-pinned (not @latest) so a future npm major can't raise its Node floor out from under this runner again
       - run: npm ci
       - run: npm test
       - run: npm run build
