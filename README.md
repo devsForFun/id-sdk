@@ -181,6 +181,12 @@ Strict semver. Breaking changes bump the major. Pre-1.0 (v0.x), minor bumps may 
 
 ## Changelog
 
+- **0.11.3** — **Re-cut of 0.11.2, no code change.** `v0.11.2` was tagged
+  by the old split release workflow (create-release-via-`GITHUB_TOKEN`,
+  react-to-the-release-event), which never actually published due to
+  GitHub's anti-recursion rule — see `RELEASING.md`. This is the first
+  version built and published by the consolidated single-workflow
+  `auto-release.yml`, with npm trusted publishing (OIDC) now configured.
 - **0.11.2** — **Re-cut of 0.11.1, no code change.** The `v0.11.1` tag was
   cut before a broken `release.yml` (Node 20 runner vs. npm's current
   engine requirement) was fixed, so it never actually published — the tag
