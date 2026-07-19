@@ -5,10 +5,11 @@
 3. PR → merge to `main` (CI must be green).
 
 That's it — merging a `package.json` version bump to `main` is the entire
-release trigger. `auto-release.yml` builds, tests, publishes to npm, and
-creates the tag + GitHub Release, all in one job (idempotent — it no-ops if
-`v<version>` is already tagged, so unrelated `package.json` edits that don't
-change `version` are harmless).
+release trigger. `auto-release.yml` builds, tests, publishes to npm,
+mirrors the publish to GitHub Packages, and creates the tag + GitHub
+Release, all in one job (idempotent — it no-ops if `v<version>` is already
+tagged, so unrelated `package.json` edits that don't change `version` are
+harmless).
 
 It's intentionally a single workflow rather than "tag, then let a
 release-triggered workflow react to it": GitHub Actions refuses to let events
@@ -17,30 +18,23 @@ built-in anti-recursion protection), so that split design creates the tag but
 silently never publishes. If you're ever tempted to re-split this, don't —
 that's exactly the bug this file used to describe before it got fixed.
 
-## npm auth — do this once
+## npm auth
 
-Trusted publishing (OIDC, no secret to hold or rotate) is preferred, and the
-workflow is already wired for it (`permissions: id-token: write`, npm pinned
-to >=11.5 via the `npm@11` install step):
+**Trusted publishing (OIDC) is configured and confirmed working** as of
+v0.11.3 — no secret held or rotated. Set up on npmjs.com → `@devsforfun/id-sdk`
+package → Settings → Trusted Publisher → GitHub Actions publisher for
+`devsForFun/id-sdk`, workflow filename `auto-release.yml`, no environment.
+The workflow is wired for it (`permissions: id-token: write`, npm pinned to
+>=11.5 via the `npm@11` install step).
 
-1. On npmjs.com → `@devsforfun/id-sdk` package → **Settings → Trusted
-   Publisher** → add a GitHub Actions publisher:
-   - Organization / repo: `devsForFun/id-sdk`
-   - Workflow filename: `auto-release.yml`
-   - Environment: leave blank (none configured)
-2. That's it — no GitHub secret needed. `npm publish` auto-detects the OIDC
-   token when running inside that exact workflow.
+If trusted publishing is ever removed/broken, the workflow falls back to an
+`NPM_TOKEN` repo secret (Automation-type token, scoped to
+`@devsforfun/id-sdk`, from npmjs.com → Access Tokens):
+`gh secret set NPM_TOKEN --repo devsForFun/id-sdk`.
 
-**Until that's configured** (or as a fallback), set an `NPM_TOKEN` repo
-secret (Automation-type token, scoped to `@devsforfun/id-sdk`, from npmjs.com
-→ Access Tokens): `gh secret set NPM_TOKEN --repo devsForFun/id-sdk`. The
-workflow already falls back to it via `NODE_AUTH_TOKEN`.
-
-**Neither is configured as of this writing** — confirmed via `gh secret
-list` (empty) and the fact that `release.yml` never once completed a
-successful run. The 0.10.0/0.11.0 versions on npm were published manually
-from a local checkout. Set up trusted publishing before relying on this
-workflow to actually publish anything.
+The GitHub Packages mirror publish uses the default `GITHUB_TOKEN` (given
+`permissions: packages: write`) — no separate token needed, since that's a
+write to a package associated with this same repo.
 
 ## Manual publish (fallback / first bootstrap)
 
@@ -51,5 +45,5 @@ pins publishes to registry.npmjs.org so that override cannot hijack a
 release.
 
 After publishing to npm, mirror to GitHub Packages so existing first-party
-`.npmrc` setups keep resolving:
-`npm publish --registry=https://npm.pkg.github.com`.
+`.npmrc` setups keep resolving: `npm publish --registry=https://npm.pkg.github.com`
+(the automated workflow already does this — only needed if publishing by hand).

@@ -15,6 +15,7 @@ on:
 permissions:
   contents: write # to create the tag + GitHub Release
   id-token: write # npm trusted publishing (OIDC provenance)
+  packages: write # to mirror the publish to GitHub Packages (see below)
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -52,6 +53,19 @@ jobs:
           # for the one-time npmjs.com setup). This is the fallback if that isn't
           # configured yet, or for orgs that stick with token auth.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # CLAUDE.md: "mirrored to GitHub Packages so satellites' existing
+      # .npmrc keeps resolving" — first-party repos (e.g. devsForFun/id) map
+      # the whole @devsforfun scope to GitHub Packages. This is a WRITE to a
+      # package associated with THIS repo, so the default GITHUB_TOKEN can do
+      # it (given packages: write above) — no extra secret needed. --registry
+      # overrides publishConfig for just this invocation; prepublishOnly no
+      # longer gates on registry (see scripts/check-publish-registry.mjs), so
+      # this only re-checks dist/ is present (already built above).
+      - name: Mirror v${{ steps.pkg.outputs.version }} to GitHub Packages
+        if: steps.check.outputs.exists == 'false'
+        run: npm publish --registry=https://npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Tag + GitHub Release v${{ steps.pkg.outputs.version }}
         if: steps.check.outputs.exists == 'false'
         env:
