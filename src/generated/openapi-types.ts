@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the signed-in user’s profile */
+        /**
+         * Get the signed-in user’s profile
+         * @description Returns the caller’s own profile fields, including any not exposed on the public profile.
+         */
         get: operations["getApiProfileMe"];
         put?: never;
         post?: never;

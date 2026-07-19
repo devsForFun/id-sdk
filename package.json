@@ -1,6 +1,6 @@
 {
     "name": "@devsforfun/id-sdk",
-    "version": "0.11.0",
+    "version": "0.11.1",
     "description": "Typed Node SDK for devsforfun ID \u2014 auth, profile, entitlements, payments, app-to-app data sharing, AI agents, Google proxy, and webhooks.",
     "type": "module",
     "main": "./dist/index.cjs",
