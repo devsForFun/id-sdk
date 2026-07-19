@@ -181,6 +181,11 @@ Strict semver. Breaking changes bump the major. Pre-1.0 (v0.x), minor bumps may 
 
 ## Changelog
 
+- **0.11.2** — **Re-cut of 0.11.1, no code change.** The `v0.11.1` tag was
+  cut before a broken `release.yml` (Node 20 runner vs. npm's current
+  engine requirement) was fixed, so it never actually published — the tag
+  and GitHub Release exist, but the package on npm skips straight from
+  0.11.0 to 0.11.2. See the 0.11.1 entry below for the actual content.
 - **0.11.1** — **Docs sync, no code change.** Regenerated
   `src/generated/openapi-types.ts` from the hub's current public OpenAPI
   spec — `GET /api/profile/me` was missing its `description` (added on the
