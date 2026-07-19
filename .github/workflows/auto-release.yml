@@ -1,16 +1,22 @@
 name: Auto Release
-# Turns a version bump merged to main into a GitHub Release automatically —
-# that Release publish event is what triggers release.yml (npm publish). So
-# the whole flow is: bump package.json + add a README changelog entry, PR,
-# merge — nothing further to do by hand.
+# Publishes @devsforfun/id-sdk to npm whenever package.json's version is bumped
+# on main. Deliberately a SINGLE workflow (build+test+publish+tag), not a
+# tag-then-react-to-release-event split: GitHub Actions refuses to let events
+# created by the default GITHUB_TOKEN trigger a second workflow run (its
+# anti-recursion rule), so a "create the release, let release.yml react to
+# it" design silently never runs the publish step. Doing everything in one
+# job sidesteps that rule entirely — there's nothing left to (fail to)
+# trigger.
 on:
   push:
     branches: [main]
     paths: ['package.json']
+  workflow_dispatch: {} # manual escape hatch — re-run by hand if this ever needs a retry
 permissions:
-  contents: write
+  contents: write # to create the tag + GitHub Release
+  id-token: write # npm trusted publishing (OIDC provenance)
 jobs:
-  tag-release:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +30,29 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Create release v${{ steps.pkg.outputs.version }}
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.exists == 'false'
+        with:
+          node-version: 24 # npm@11 (below) requires Node ^22.22.2 || ^24.15.0 || >=26 — keep these two in lockstep
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm install -g npm@11 # trusted publishing needs npm >= 11.5; major-pinned (not @latest) so a future npm major can't raise its Node floor out from under this runner again
+        if: steps.check.outputs.exists == 'false'
+      - run: npm ci
+        if: steps.check.outputs.exists == 'false'
+      - run: npm test
+        if: steps.check.outputs.exists == 'false'
+      - run: npm run build
+        if: steps.check.outputs.exists == 'false'
+      - name: npm publish v${{ steps.pkg.outputs.version }}
+        if: steps.check.outputs.exists == 'false'
+        run: npm publish --provenance --access public
+        env:
+          # OIDC trusted publishing is preferred (needs no secret — see RELEASING.md
+          # for the one-time npmjs.com setup). This is the fallback if that isn't
+          # configured yet, or for orgs that stick with token auth.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Tag + GitHub Release v${{ steps.pkg.outputs.version }}
         if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
